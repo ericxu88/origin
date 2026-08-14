@@ -36,3 +36,6 @@ docs/
 data/hc3/
 data/mage/
 data/combined/
+
+# Local Claude Code settings
+.claude/settings.local.json
