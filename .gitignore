@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+dist/
+build/
+*.egg-info/
+
+# Node
+node_modules/
+apps/web/dist/
+
+# ML artifacts / experiment outputs (samples that must be committed live in data/sample/ and experiments/)
+artifacts/
+runs/
+checkpoints/
+*.ckpt
+*.safetensors
+!tests/fixtures/**/*.safetensors
+
+# Env / secrets
+.env
+!.env.example
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+docs/
