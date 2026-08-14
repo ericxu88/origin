@@ -45,7 +45,7 @@ features.
    perplexity/surprisal features?
 
 The experiment protocol, metric definitions, and ablation matrix live in
-[`docs/RESEARCH.md`](docs/RESEARCH.md).
+[`RESEARCH.md`](RESEARCH.md).
 
 ## How detection works
 
