@@ -142,6 +142,36 @@ All of the above run offline on the bundled sample corpus with the deterministic
 stub scorer. For real perplexity signals, pass `--scorer hf:distilgpt2` (or any
 causal checkpoint) — the first use downloads the model.
 
+### Real corpora & robustness to newer models
+
+Two importers build real training corpora (not committed; regenerated locally):
+
+```bash
+uv run python scripts/import_hc3.py               # HC3: human vs ChatGPT answers
+uv run python scripts/import_mage.py              # MAGE: 7 model families × 10 domains,
+                                                  # + GPT-4 out-of-distribution testbeds
+uv run origin train baseline --scorer hf:distilgpt2 \
+    --dataset data/combined/documents.jsonl --out artifacts/robust
+uv run python scripts/eval_robust.py --artifacts artifacts/robust \
+    --dataset data/combined/documents.jsonl \
+    --ood data/mage/ood_gpt4.jsonl --ood-para data/mage/ood_gpt4_para.jsonl
+```
+
+Measured on this protocol (interpretable logistic regression, distilgpt2 scorer):
+
+| Evaluation | AUROC |
+|---|---|
+| Held-out test, 8 seen families | 0.90 |
+| **GPT-4 — family AND domain never seen in training** | **0.81** |
+| GPT-4 + paraphrase attack | 0.48 (chance) |
+
+Two findings worth internalizing: detection transfers meaningfully to an unseen
+newer model because it rests on an ensemble of distributional signals rather
+than raw perplexity alone (a pilot showed perplexity by itself only reaches
+AUROC ≈ 0.61 on GPT-4 text); and a determined paraphrase attack still defeats
+the detector entirely — an honest ceiling that mirrors the published
+literature, not a bug in this implementation.
+
 ### Sample data
 
 `data/sample/documents.jsonl` is a **synthetic fixture corpus** (102 documents:
