@@ -84,3 +84,7 @@ addopts = "-m 'not integration'"
 markers = [
     "integration: heavyweight opt-in tests using real model checkpoints (run with -m integration)",
 ]
+filterwarnings = [
+    # Third-party: starlette's own TestClient import warns about its httpx backend.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:Warning",
+]
