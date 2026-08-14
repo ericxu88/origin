@@ -1,0 +1,18 @@
+{
+  "name": "sample-full",
+  "dataset": "data/sample/documents.jsonl",
+  "output_dir": "runs",
+  "seed": 0,
+  "train_ratio": 0.8,
+  "scorer": "stub",
+  "neural_checkpoint": "tests/fixtures/tiny_classifier",
+  "neural_epochs": 3,
+  "ablations": [
+    "perplexity_only",
+    "statistical_features",
+    "classical_full",
+    "neural",
+    "combined"
+  ],
+  "holdout_families": ["gamma"]
+}
