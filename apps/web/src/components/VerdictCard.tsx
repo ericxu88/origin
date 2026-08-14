@@ -1,4 +1,4 @@
-import type { AnalysisResult } from "../api/types";
+import type { AnalysisResult, ClassProbabilities } from "../api/types";
 import { EvidenceBadge } from "./Badge";
 
 const LABEL_TEXT: Record<AnalysisResult["label"], string> = {
@@ -9,6 +9,41 @@ const LABEL_TEXT: Record<AnalysisResult["label"], string> = {
 
 function pct(value: number): string {
   return `${(value * 100).toFixed(0)}%`;
+}
+
+function ClassScores({ scores }: { scores: ClassProbabilities }) {
+  const entries = [
+    { key: "human", label: "Human", value: scores.human },
+    { key: "mixed", label: "Mixed", value: scores.mixed },
+    { key: "ai", label: "AI", value: scores.ai },
+  ] as const;
+  return (
+    <div className="classbar" data-testid="class-scores">
+      <div
+        className="classbar__track"
+        role="img"
+        aria-label={`Class scores: human ${pct(scores.human)}, mixed ${pct(scores.mixed)}, AI ${pct(scores.ai)}`}
+      >
+        {entries.map(
+          (entry) =>
+            entry.value > 0 && (
+              <div
+                key={entry.key}
+                className={`classbar__segment classbar__segment--${entry.key}`}
+                style={{ width: `${entry.value * 100}%` }}
+              />
+            ),
+        )}
+      </div>
+      <div className="classbar__labels">
+        {entries.map((entry) => (
+          <span key={entry.key} className={`classbar__label classbar__label--${entry.key}`}>
+            {entry.label} {pct(entry.value)}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function VerdictCard({ analysis }: { analysis: AnalysisResult }) {
@@ -55,6 +90,7 @@ export function VerdictCard({ analysis }: { analysis: AnalysisResult }) {
           )}
         </div>
       </div>
+      <ClassScores scores={analysis.class_probabilities} />
       <p className="disclaimer" data-testid="disclaimer">
         {analysis.disclaimer}
       </p>

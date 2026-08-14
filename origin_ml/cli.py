@@ -178,6 +178,10 @@ def analyze(
         return
 
     typer.echo(f"verdict     : {result.label.value.upper()}  (confidence {result.confidence:.0%})")
+    scores = result.class_probabilities
+    typer.echo(
+        f"class scores: human {scores.human:.0%} / ai {scores.ai:.0%} / mixed {scores.mixed:.0%}"
+    )
     typer.echo(
         f"sentence AI : mean P(ai) {result.mean_p_ai:.0%}, "
         f"{result.frac_ai_sentences:.0%} of sentences AI-leaning"

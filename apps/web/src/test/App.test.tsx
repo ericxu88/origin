@@ -47,6 +47,12 @@ describe("App analyze flow (SPEC W-1, W-6)", () => {
     expect(await screen.findByTestId("verdict-label")).toHaveTextContent("LIKELY MIXED");
     expect(screen.getByTestId("disclaimer")).toHaveTextContent("not proof");
 
+    // Three-way class scores rendered from the fixture (30/70/0).
+    const classScores = screen.getByTestId("class-scores");
+    expect(classScores).toHaveTextContent("Human 30%");
+    expect(classScores).toHaveTextContent("Mixed 70%");
+    expect(classScores).toHaveTextContent("AI 0%");
+
     // Heatmap renders one accessible button per sentence with its probability.
     const sentences = screen.getAllByRole("button", { name: /AI probability/ });
     expect(sentences).toHaveLength(3);

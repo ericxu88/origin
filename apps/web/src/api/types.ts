@@ -71,9 +71,16 @@ export interface EvidenceBundle {
   distribution_comparison: DistributionComparisonSection | null;
 }
 
+export interface ClassProbabilities {
+  human: number;
+  ai: number;
+  mixed: number;
+}
+
 export interface AnalysisResult {
   label: DocLabel;
   confidence: number;
+  class_probabilities: ClassProbabilities;
   mean_p_ai: number;
   frac_ai_sentences: number;
   document_p_ai: number | null;

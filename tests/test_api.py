@@ -86,6 +86,10 @@ class TestAnalyze:
         comparison = analysis["evidence"]["distribution_comparison"]
         assert comparison is not None and comparison["comparisons"]
 
+        scores = analysis["class_probabilities"]
+        assert set(scores) == {"human", "ai", "mixed"}
+        assert abs(sum(scores.values()) - 1.0) < 1e-9
+
         assert body["detector"]["name"] == "classical"
 
     def test_localization_direction(self, client: TestClient) -> None:

@@ -91,6 +91,32 @@ class TestAggregation:
         decision = aggregate_sentence_probs([0.9, 0.9, 0.9, 0.1], config)
         assert decision.label is DocLabel.MIXED
 
+    def test_class_scores_sum_to_one_and_match_label(self) -> None:
+        for probs in ([0.9, 0.95, 0.85], [0.1, 0.05, 0.2], [0.9, 0.9, 0.1, 0.1], [0.6, 0.4]):
+            decision = aggregate_sentence_probs(probs)
+            scores = {"human": decision.p_human, "ai": decision.p_ai, "mixed": decision.p_mixed}
+            assert sum(scores.values()) == pytest.approx(1.0)
+            assert max(scores, key=lambda k: scores[k]) == decision.label.value
+
+    def test_class_scores_hand_computed(self) -> None:
+        # Defaults: low=0.25, high=0.75 -> transition half-width h=0.125.
+        # frac_ai = 1.0 -> pure AI zone.
+        decision = aggregate_sentence_probs([0.9, 0.9])
+        assert (decision.p_human, decision.p_mixed, decision.p_ai) == (0.0, 0.0, 1.0)
+        # frac_ai = 0.0 -> pure human zone.
+        decision = aggregate_sentence_probs([0.1, 0.2])
+        assert (decision.p_human, decision.p_mixed, decision.p_ai) == (1.0, 0.0, 0.0)
+        # frac_ai = 0.5 -> mixed plateau.
+        decision = aggregate_sentence_probs([0.9, 0.1])
+        assert decision.p_mixed == 1.0
+        # frac_ai = 0.3 -> inside the lower transition [0.125, 0.375]:
+        # mixed = (0.3 - 0.125) / 0.25 = 0.7, human = 0.3.
+        decision = aggregate_sentence_probs([0.9, 0.9, 0.9, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
+        assert decision.p_mixed == pytest.approx(0.7)
+        assert decision.p_human == pytest.approx(0.3)
+        assert decision.p_ai == 0.0
+        assert decision.label is DocLabel.MIXED  # coherent with hard rule
+
     def test_empty_rejected(self) -> None:
         with pytest.raises(ValueError, match="empty"):
             aggregate_sentence_probs([])

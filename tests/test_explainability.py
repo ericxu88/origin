@@ -179,6 +179,16 @@ class TestEvidenceBundle:
         assert "ppl.doc_perplexity" in features
         assert all(c.closer_to in ("human", "ai", "similar") for c in comparison.comparisons)
 
+    def test_class_probabilities(self, result: AnalysisResult) -> None:
+        scores = result.class_probabilities
+        total = scores.human + scores.ai + scores.mixed
+        assert total == pytest.approx(1.0)
+        best = max(
+            (("human", scores.human), ("ai", scores.ai), ("mixed", scores.mixed)),
+            key=lambda kv: kv[1],
+        )[0]
+        assert best == result.label.value
+
     def test_disclaimer_always_present(self, result: AnalysisResult) -> None:
         assert result.disclaimer == DISCLAIMER
         assert "not proof" in result.disclaimer

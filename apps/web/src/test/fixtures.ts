@@ -8,6 +8,7 @@ export const MIXED_RESPONSE: AnalyzeResponse = {
   analysis: {
     label: "mixed",
     confidence: 0.72,
+    class_probabilities: { human: 0.3, ai: 0, mixed: 0.7 },
     mean_p_ai: 0.48,
     frac_ai_sentences: 0.33,
     document_p_ai: 0.41,

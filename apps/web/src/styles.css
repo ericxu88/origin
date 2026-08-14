@@ -334,6 +334,51 @@ button {
   background: var(--accent);
 }
 
+.classbar {
+  margin-top: 16px;
+}
+
+.classbar__track {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.classbar__segment--human {
+  background: var(--human);
+}
+
+.classbar__segment--mixed {
+  background: var(--mixed);
+}
+
+.classbar__segment--ai {
+  background: var(--ai);
+}
+
+.classbar__labels {
+  display: flex;
+  gap: 18px;
+  margin-top: 7px;
+  font-family: var(--mono);
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.classbar__label--human {
+  color: var(--human);
+}
+
+.classbar__label--mixed {
+  color: var(--mixed);
+}
+
+.classbar__label--ai {
+  color: var(--ai);
+}
+
 .disclaimer {
   margin: 14px 0 0;
   padding-top: 12px;

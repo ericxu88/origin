@@ -40,7 +40,7 @@ from origin_ml.features.base import AnalyzedText
 from origin_ml.features.pipeline import FeaturePipeline
 from origin_ml.scoring.base import perplexity
 
-__all__ = ["DISCLAIMER", "AnalysisResult", "analyze_document"]
+__all__ = ["DISCLAIMER", "AnalysisResult", "ClassProbabilities", "analyze_document"]
 
 DISCLAIMER = (
     "Origin reports statistical evidence, not proof. AI-text detection is "
@@ -52,6 +52,20 @@ DISCLAIMER = (
 _Z_SIMILAR_MARGIN = 0.25  # |z| difference below this counts as "similar"
 
 
+class ClassProbabilities(BaseModel):
+    """Soft Human/AI/Mixed class scores (sum to 1; argmax matches the label).
+
+    Derived from the same statistic and thresholds as the decision rule — see
+    :mod:`origin_ml.detectors.aggregation`. Model evidence, not certainty.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    human: float = Field(ge=0, le=1)
+    ai: float = Field(ge=0, le=1)
+    mixed: float = Field(ge=0, le=1)
+
+
 class AnalysisResult(BaseModel):
     """Structured document + sentence prediction with evidence (SPEC L-2)."""
 
@@ -59,6 +73,7 @@ class AnalysisResult(BaseModel):
 
     label: DocLabel
     confidence: float = Field(ge=0, le=1)
+    class_probabilities: ClassProbabilities
     mean_p_ai: float = Field(ge=0, le=1)
     frac_ai_sentences: float = Field(ge=0, le=1)
     document_p_ai: float | None = None
@@ -212,6 +227,9 @@ def analyze_document(
     return AnalysisResult(
         label=decision.label,
         confidence=decision.confidence,
+        class_probabilities=ClassProbabilities(
+            human=decision.p_human, ai=decision.p_ai, mixed=decision.p_mixed
+        ),
         mean_p_ai=decision.mean_p_ai,
         frac_ai_sentences=decision.frac_ai_sentences,
         document_p_ai=document_p_ai,
