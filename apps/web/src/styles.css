@@ -500,9 +500,12 @@ button {
   font-size: 11.5px;
   color: var(--text-faint);
   font-family: var(--mono);
-  display: flex;
-  gap: 8px;
-  align-items: center;
+  line-height: 1.7;
+}
+
+.surprisal__caption .badge {
+  margin-right: 6px;
+  vertical-align: 1px;
 }
 
 /* ─── Research panel ─────────────────────────────────────────────────── */
@@ -544,6 +547,7 @@ button {
 
 .data-table th {
   text-align: left;
+  white-space: nowrap;
   color: var(--text-faint);
   font-weight: 500;
   font-size: 11px;
@@ -566,7 +570,11 @@ button {
 .data-table--scroll {
   display: block;
   max-height: 340px;
-  overflow-y: auto;
+  overflow: auto;
+}
+
+.data-table--scroll .data-table {
+  min-width: 560px;
 }
 
 .num {
