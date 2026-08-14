@@ -104,7 +104,7 @@ def stratified_sample(
     return sampled
 
 
-def build_records(pairs: list[dict[str, str]], n_mixed: int, rng: random.Random) -> list[DocumentRecord]:
+def build_records(pairs: list[dict[str, str]], n_mixed: int) -> list[DocumentRecord]:
     records: list[DocumentRecord] = []
     mixing_reserve, standalone = pairs[:n_mixed], pairs[n_mixed:]
 
@@ -141,7 +141,9 @@ def build_records(pairs: list[dict[str, str]], n_mixed: int, rng: random.Random)
                 doc_id=group,
                 human_text=pair["human"],
                 ai_text=pair["ai"],
-                generation=GENERATION.model_copy(update={"prompt_id": f"hc3-{pair['source']}-{pair['index']}"}),
+                generation=GENERATION.model_copy(
+                    update={"prompt_id": f"hc3-{pair['source']}-{pair['index']}"}
+                ),
                 group_id=group,
                 source=f"hc3-{pair['source']}",
                 seed=SEED + i,
@@ -181,7 +183,7 @@ def main() -> None:
     all_pairs = load_pairs()
     print(f"usable question pairs in HC3: {len(all_pairs)}")
     sampled = stratified_sample(all_pairs, args.pairs + args.mixed, rng)
-    records = build_records(sampled, args.mixed, rng)
+    records = build_records(sampled, args.mixed)
 
     out = OUT_DIR / "documents.jsonl"
     count = write_jsonl(out, records)
