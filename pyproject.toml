@@ -1,0 +1,82 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "origin"
+version = "0.1.0"
+description = "Origin: interpretable detection, localization, evaluation, and explanation of LLM-generated text"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=1.26",
+    "scikit-learn>=1.5",
+    "pydantic>=2.7",
+    "fastapi>=0.111",
+    "uvicorn>=0.30",
+    "typer>=0.12",
+    "matplotlib>=3.9",
+    "torch>=2.4",
+    "transformers>=4.44",
+]
+
+[project.scripts]
+origin = "origin_ml.cli:main"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pytest>=8.3",
+    "httpx>=0.27",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["origin_ml", "apps/api/origin_api"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["apps/web"]
+
+[tool.ruff.lint]
+# Intentional typographic characters: curly quotes / fullwidth paren are real
+# sentence closers handled by the segmenter; en dash appears in citations.
+allowed-confusables = ["’", "”", "）", "–"]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "UP",        # pyupgrade
+    "B",         # bugbear
+    "SIM",       # simplify
+    "C4",        # comprehensions
+    "RET",       # return
+    "RUF",       # ruff-specific
+    "PTH",       # pathlib
+    "N",         # naming
+    "ARG",       # unused arguments
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+files = ["origin_ml", "apps/api", "tests", "scripts"]
+exclude = ["apps/web"]
+
+[[tool.mypy.overrides]]
+module = [
+    "sklearn.*",
+    "matplotlib.*",
+    "transformers.*",
+    "joblib.*",
+    "scipy.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not integration'"
+markers = [
+    "integration: heavyweight opt-in tests using real model checkpoints (run with -m integration)",
+]
