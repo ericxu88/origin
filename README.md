@@ -157,13 +157,22 @@ uv run python scripts/eval_robust.py --artifacts artifacts/robust \
     --ood data/mage/ood_gpt4.jsonl --ood-para data/mage/ood_gpt4_para.jsonl
 ```
 
-Measured on this protocol (interpretable logistic regression, distilgpt2 scorer):
+Measured on this protocol (interpretable logistic regression, distilgpt2 scorer),
+at two corpus scales (1,570 vs 5,120 documents):
 
-| Evaluation | AUROC |
-|---|---|
-| Held-out test, 8 seen families | 0.90 |
-| **GPT-4 — family AND domain never seen in training** | **0.81** |
-| GPT-4 + paraphrase attack | 0.48 (chance) |
+| Evaluation (AUROC) | 1.5k corpus | 5.1k corpus |
+|---|---|---|
+| Held-out test, 8 seen families | 0.90 | 0.91 |
+| Weakest seen family (flan-t5) | 0.67 | 0.76 |
+| Sentence localization (mixed docs) | 0.73 | 0.76 |
+| **GPT-4 — family AND domain never seen in training** | **0.81** | 0.79 |
+| GPT-4 + paraphrase attack | 0.48 (chance) | 0.47 (chance) |
+
+Scaling the corpus 3.3× improved in-distribution detection, the weakest
+families, and localization, while unseen-model (GPT-4) transfer plateaued
+around AUROC 0.80 — the differences there are within statistical noise,
+suggesting the linear model, not data volume, is the binding constraint for
+out-of-distribution generalization.
 
 Two findings worth internalizing: detection transfers meaningfully to an unseen
 newer model because it rests on an ensemble of distributional signals rather
