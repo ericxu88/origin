@@ -1,4 +1,14 @@
-"""Record-level training entry point for the baseline detector (SPEC C-2)."""
+"""Record-level training entry points for the baseline detector (SPEC C-2).
+
+Two classical models are trained from the same feature pipeline:
+
+- :func:`train_baseline` — a **document-level** classifier over whole-document
+  feature vectors (document probability, distribution comparisons).
+- :func:`train_sentence_baseline` — a **sentence-level** classifier over
+  per-sentence feature vectors, used for classical localization (SPEC L-2).
+  Document-level models must not be applied to single sentences: sentence
+  vectors lie far outside the document-level training distribution.
+"""
 
 from __future__ import annotations
 
@@ -9,8 +19,9 @@ import numpy as np
 from origin_ml.datasets.schema import DocLabel, DocumentRecord
 from origin_ml.detectors.classical import BaselineConfig, BaselineDetector
 from origin_ml.features.pipeline import FeaturePipeline
+from origin_ml.training.examples import sentence_examples
 
-__all__ = ["extract_feature_matrix", "train_baseline"]
+__all__ = ["extract_feature_matrix", "train_baseline", "train_sentence_baseline"]
 
 
 def extract_feature_matrix(
@@ -56,6 +67,44 @@ def train_baseline(
         config=config,
         scorer_name=scorer.name if scorer is not None else None,
         training_meta={
+            "level": "document",
+            "dataset": dataset_name,
+            "split": split,
+            "n_human": int((labels == 0).sum()),
+            "n_ai": int((labels == 1).sum()),
+        },
+    )
+
+
+def train_sentence_baseline(
+    records: Sequence[DocumentRecord],
+    pipeline: FeaturePipeline,
+    *,
+    config: BaselineConfig | None = None,
+    split: str | None = "train",
+    dataset_name: str | None = None,
+) -> BaselineDetector:
+    """Train the sentence-level classical classifier (SPEC L-2).
+
+    Uses every document of ``split`` — including mixed documents, whose
+    sentences are labelled from their ground-truth spans.
+    """
+    usable = [r for r in records if split is None or r.split == split]
+    examples = sentence_examples(list(usable))
+    if not examples:
+        raise ValueError("no sentences derived from the requested split")
+
+    features = np.asarray([pipeline.extract(text).values for text, _ in examples], dtype=np.float64)
+    labels = np.asarray([label for _, label in examples], dtype=np.int64)
+    scorer = pipeline.scorer
+    return BaselineDetector.train(
+        features,
+        labels,
+        pipeline.feature_names,
+        config=config,
+        scorer_name=scorer.name if scorer is not None else None,
+        training_meta={
+            "level": "sentence",
             "dataset": dataset_name,
             "split": split,
             "n_human": int((labels == 0).sum()),

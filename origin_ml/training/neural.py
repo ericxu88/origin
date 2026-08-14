@@ -1,11 +1,8 @@
 """Configurable neural training loop (SPEC N-4).
 
-Trains the sentence-granular neural detector on dataset records:
-
-- human documents contribute their sentences with label 0,
-- ai documents contribute their sentences with label 1,
-- mixed documents contribute per-sentence labels derived from their ground
-  truth spans (sentence midpoint inside an AI span → label 1).
+Trains the sentence-granular neural detector on dataset records; sentence
+examples are derived by :func:`origin_ml.training.examples.sentence_examples`
+(mixed documents contribute per-span sentence labels).
 
 Determinism: Python/NumPy/Torch RNGs are seeded from the config; data order is
 driven by a seeded ``torch.Generator``. CPU training of the tiny test fixture
@@ -22,10 +19,10 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-from origin_ml.datasets.schema import DocLabel, DocumentRecord, SegmentLabel
+from origin_ml.datasets.schema import DocumentRecord
 from origin_ml.detectors.neural import NeuralDetector
 from origin_ml.device import resolve_device
-from origin_ml.text.segmentation import segment_sentences
+from origin_ml.training.examples import sentence_examples
 
 __all__ = ["NeuralTrainConfig", "TrainReport", "sentence_examples", "train_neural"]
 
@@ -52,27 +49,6 @@ class TrainReport:
     n_examples: int = 0
     device: str = "cpu"
     saved_to: str | None = None
-
-
-def sentence_examples(records: list[DocumentRecord]) -> list[tuple[str, int]]:
-    """Flatten records into (sentence, label) pairs; see module docstring."""
-    examples: list[tuple[str, int]] = []
-    for record in records:
-        for span in segment_sentences(record.text):
-            if record.label is DocLabel.HUMAN:
-                label = 0
-            elif record.label is DocLabel.AI:
-                label = 1
-            else:
-                midpoint = (span.start + span.end) / 2
-                label = int(
-                    any(
-                        s.label is SegmentLabel.AI and s.start <= midpoint < s.end
-                        for s in record.spans
-                    )
-                )
-            examples.append((span.text, label))
-    return examples
 
 
 class _SentenceDataset(Dataset[tuple[str, int]]):
