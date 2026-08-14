@@ -68,15 +68,16 @@ def load_pairs() -> list[dict[str, str]]:
     path = hf_hub_download("Hello-SimpleAI/HC3", "all.jsonl", repo_type="dataset")
     pairs: list[dict[str, str]] = []
     with Path(path).open(encoding="utf-8") as handle:
-        for line in handle:
+        for line_no, line in enumerate(handle):
             row = json.loads(line)
             humans = [a.strip() for a in row.get("human_answers", []) if usable(a)]
             bots = [a.strip() for a in row.get("chatgpt_answers", []) if usable(a)]
             if humans and bots:
+                index = row.get("index")
                 pairs.append(
                     {
                         "source": row["source"],
-                        "index": str(row["index"]),
+                        "index": str(index if index is not None else line_no),
                         "question": row["question"].strip(),
                         "human": humans[0],
                         "ai": bots[0],
