@@ -69,10 +69,14 @@ module = [
     "sklearn.*",
     "matplotlib.*",
     "transformers.*",
+    "tokenizers.*",
     "joblib.*",
     "scipy.*",
 ]
 ignore_missing_imports = true
+# transformers ships py.typed but many constructors are unannotated; treating
+# these libraries as Any keeps our strict settings meaningful for our own code.
+follow_imports = "skip"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
