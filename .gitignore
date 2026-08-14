@@ -31,3 +31,6 @@ checkpoints/
 .vscode/
 
 docs/
+
+# Imported real-world corpora (regenerate via scripts/import_hc3.py; not committed)
+data/hc3/
