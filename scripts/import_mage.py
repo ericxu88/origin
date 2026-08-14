@@ -181,6 +181,53 @@ def build_training_corpus(
     return sorted(records, key=lambda r: r.id)
 
 
+def domain_boost(
+    rows: list[tuple[str, str, str]],
+    domain: str,
+    count: int,
+    taken_texts: set[str],
+    rng: random.Random,
+) -> list[DocumentRecord]:
+    """Class-balanced extra docs from one domain (news-style human coverage)."""
+    humans: list[str] = []
+    machines: list[tuple[str, str]] = []
+    rng.shuffle(rows)
+    for text, label, src in rows:
+        row_domain, raw_model = parse_src(src)
+        if row_domain != domain or text in taken_texts or not usable(text):
+            continue
+        if label == "1":
+            humans.append(text)
+        elif raw_model is not None:
+            machines.append((text, raw_model))
+    per_class = count // 2
+    records: list[DocumentRecord] = []
+    for i, text in enumerate(humans[:per_class]):
+        records.append(
+            _record(
+                f"mage-boost-human-{domain}-{i:04d}",
+                text,
+                DocLabel.HUMAN,
+                f"mage-{domain}",
+                None,
+                None,
+            )
+        )
+    for i, (text, raw_model) in enumerate(machines[:per_class]):
+        family = model_family(raw_model)
+        records.append(
+            _record(
+                f"mage-boost-ai-{domain}-{i:04d}",
+                text,
+                DocLabel.AI,
+                f"mage-{domain}",
+                family,
+                raw_model,
+            )
+        )
+    return records
+
+
 def build_ood(rows: list[tuple[str, str, str]], tag: str) -> list[DocumentRecord]:
     records: list[DocumentRecord] = []
     for i, (text, label, src) in enumerate(rows):
@@ -208,11 +255,24 @@ def main() -> None:
     parser.add_argument("--machine", type=int, default=500)
     parser.add_argument("--human", type=int, default=500)
     parser.add_argument("--mixed", type=int, default=30)
+    parser.add_argument(
+        "--boost-domain",
+        default=None,
+        help="Add extra class-balanced docs from one domain (e.g. 'xsum' for news style).",
+    )
+    parser.add_argument(
+        "--boost-count", type=int, default=0, help="Total extra docs (half per class)."
+    )
     args = parser.parse_args()
 
     rng = random.Random(SEED)
     train_path = Path(hf_hub_download("yaful/DeepfakeTextDetect", "train.csv", repo_type="dataset"))
-    records = build_training_corpus(read_csv(train_path), args.machine, args.human, args.mixed, rng)
+    rows = read_csv(train_path)
+    records = build_training_corpus(rows, args.machine, args.human, args.mixed, rng)
+    if args.boost_domain and args.boost_count > 0:
+        taken_texts = {r.text for r in records}
+        records.extend(domain_boost(rows, args.boost_domain, args.boost_count, taken_texts, rng))
+        records.sort(key=lambda r: r.id)
     count = write_jsonl(OUT_DIR / "documents.jsonl", records)
     families = sorted({r.model_family for r in records if r.model_family is not None})
     print(f"wrote {count} training records ({', '.join(families)})")

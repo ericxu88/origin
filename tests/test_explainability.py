@@ -131,15 +131,44 @@ class TestClassicalPath:
         pipeline: FeaturePipeline,
         sentence_baseline: BaselineDetector,
     ) -> None:
+        """The mixture mechanism fires on genuinely bimodal sentence evidence.
+
+        Default aggregation thresholds are tuned for real-corpus document
+        models (see the aggregation module docstring); the synthetic fixture
+        corpus has a different calibration (its doc model reads spliced docs
+        as lexically diverse, i.e. human-like), so this test pins the band to
+        the fixture's sentence-probability range and verifies the mechanism —
+        pure docs stay pure, spliced docs are flagged mixed.
+        """
+        from origin_ml.detectors import AggregationConfig
+
+        config = AggregationConfig(mixed_band_low=0.25, mixed_band_high=0.85)
         mixed_docs = [r for r in records if r.label is DocLabel.MIXED]
         predictions = [
-            analyze_document(d.text, pipeline=pipeline, sentence_baseline=sentence_baseline).label
+            analyze_document(
+                d.text,
+                pipeline=pipeline,
+                sentence_baseline=sentence_baseline,
+                aggregation=config,
+            ).label
             for d in mixed_docs
         ]
-        # The aggregate rule needs a reasonable share of the fixture's mixed
-        # docs recognized as mixed (block sizes vary, so a perfect score is
-        # not expected).
-        assert predictions.count(DocLabel.MIXED) >= len(mixed_docs) * 0.6
+        assert predictions.count(DocLabel.MIXED) >= len(mixed_docs) * 0.8
+
+        pure = [r for r in records if r.split == "test" and r.label is not DocLabel.MIXED][:10]
+        pure_predictions = [
+            analyze_document(
+                d.text,
+                pipeline=pipeline,
+                sentence_baseline=sentence_baseline,
+                aggregation=config,
+            ).label
+            for d in pure
+        ]
+        assert all(
+            prediction is truth.label
+            for prediction, truth in zip(pure_predictions, pure, strict=True)
+        )
 
 
 class TestEvidenceBundle:

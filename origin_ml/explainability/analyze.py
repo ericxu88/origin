@@ -184,8 +184,6 @@ def analyze_document(
         probs = _sentence_probs_classical(doc, pipeline, sentence_baseline)
         detector_name = "baseline-logreg"
 
-    decision = aggregate_sentence_probs(probs, aggregation)
-
     document_p_ai: float | None = None
     distribution_comparison: DistributionComparisonSection | None = None
     if doc_baseline is not None:
@@ -193,6 +191,8 @@ def analyze_document(
             np.asarray(doc_vector.values, dtype=np.float64)
         )
         distribution_comparison = _distribution_comparison(features, doc_baseline)
+
+    decision = aggregate_sentence_probs(probs, aggregation, doc_p=document_p_ai)
 
     token_surprisals: TokenSurprisalSeries | None = None
     if doc.scored is not None and doc.scored.tokens:

@@ -111,7 +111,7 @@ def evaluate_mixed_doc_labels(
     hits = 0
     for record in mixed:
         probs = [p for _, p in system.sentence_p_ai(record.text)]
-        decision = aggregate_sentence_probs(probs, aggregation)
+        decision = aggregate_sentence_probs(probs, aggregation, doc_p=system.doc_p_ai(record.text))
         hits += int(decision.label is DocLabel.MIXED)
     return MixedDocSummary(n=len(mixed), frac_labelled_mixed=hits / len(mixed))
 

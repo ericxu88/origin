@@ -70,57 +70,86 @@ class TestSaveLoad:
 
 
 class TestAggregation:
-    def test_all_ai_sentences(self) -> None:
+    """Decision rule v2: doc_p-driven verdict + band/dispersion mixture test."""
+
+    def test_ai_via_mean_fallback(self) -> None:
+        # No doc_p: edp = mean = 0.9 -> above the mixed band -> AI.
         decision = aggregate_sentence_probs([0.9, 0.95, 0.85])
         assert decision.label is DocLabel.AI
-        assert decision.confidence == pytest.approx((0.9 + 0.95 + 0.85) / 3)
+        assert decision.p_mixed == 0.0
+        assert decision.p_ai == pytest.approx(0.9)
+        assert decision.confidence == pytest.approx(0.9)
 
-    def test_all_human_sentences(self) -> None:
+    def test_human_via_mean_fallback(self) -> None:
         decision = aggregate_sentence_probs([0.1, 0.05, 0.2])
         assert decision.label is DocLabel.HUMAN
-        assert decision.confidence == pytest.approx(1 - (0.1 + 0.05 + 0.2) / 3)
+        assert decision.p_human == pytest.approx(1 - (0.1 + 0.05 + 0.2) / 3)
 
-    def test_half_and_half_is_mixed(self) -> None:
+    def test_bimodal_sentences_are_mixed(self) -> None:
+        # edp = mean = 0.5 (in band [0.45, 0.85]), dispersion = 0.4 >= 0.1 -> MIXED.
+        # h = (0.85 - 0.45) / 4 = 0.1; depth = min(0.05, 0.35) / 0.1 = 0.5.
         decision = aggregate_sentence_probs([0.9, 0.9, 0.1, 0.1])
         assert decision.label is DocLabel.MIXED
         assert decision.frac_ai_sentences == 0.5
-        assert decision.confidence == pytest.approx(0.8)  # mean 2|p - 0.5|
+        assert decision.p_mixed == pytest.approx(0.7)
+        assert decision.p_ai == pytest.approx(0.15)
+        assert decision.p_human == pytest.approx(0.15)
 
-    def test_custom_thresholds(self) -> None:
-        config = AggregationConfig(mixed_low=0.05, mixed_high=0.95)
-        decision = aggregate_sentence_probs([0.9, 0.9, 0.9, 0.1], config)
+    def test_uniform_ambiguity_is_not_mixed(self) -> None:
+        # Mid probability with no dispersion is ambiguity, not mixture.
+        decision = aggregate_sentence_probs([0.5, 0.5, 0.5])
+        assert decision.label is not DocLabel.MIXED
+        assert decision.p_mixed == 0.0
+
+    def test_doc_p_overrides_sentence_bias(self) -> None:
+        """The human-corpus fix: mildly AI-ish sentences, confident human doc_p."""
+        decision = aggregate_sentence_probs([0.6, 0.6, 0.6], doc_p=0.05)
+        assert decision.label is DocLabel.HUMAN
+        assert decision.p_human == pytest.approx(0.95)
+
+    def test_doc_p_in_band_with_dispersion_is_mixed(self) -> None:
+        decision = aggregate_sentence_probs([0.9, 0.1], doc_p=0.6)
         assert decision.label is DocLabel.MIXED
+        assert decision.p_mixed == pytest.approx(0.9)  # depth caps at 1
+
+    def test_partial_band_depth(self) -> None:
+        # h = (0.85 - 0.45) / 4 = 0.1; edp = 0.5 -> depth = 0.05 / 0.1 = 0.5.
+        decision = aggregate_sentence_probs([0.9, 0.1], doc_p=0.5)
+        assert decision.label is DocLabel.MIXED
+        assert decision.p_mixed == pytest.approx(0.7)
+
+    def test_below_band_is_not_mixed(self) -> None:
+        # doc_p below the band -> human even with dispersed sentences.
+        decision = aggregate_sentence_probs([0.9, 0.1], doc_p=0.4)
+        assert decision.label is DocLabel.HUMAN
 
     def test_class_scores_sum_to_one_and_match_label(self) -> None:
-        for probs in ([0.9, 0.95, 0.85], [0.1, 0.05, 0.2], [0.9, 0.9, 0.1, 0.1], [0.6, 0.4]):
-            decision = aggregate_sentence_probs(probs)
+        cases = [
+            ([0.9, 0.95, 0.85], None),
+            ([0.1, 0.05, 0.2], None),
+            ([0.9, 0.9, 0.1, 0.1], None),
+            ([0.6, 0.6, 0.6], 0.05),
+            ([0.9, 0.1], 0.6),
+            ([0.2, 0.9], 0.95),
+        ]
+        for probs, doc_p in cases:
+            decision = aggregate_sentence_probs(probs, doc_p=doc_p)
             scores = {"human": decision.p_human, "ai": decision.p_ai, "mixed": decision.p_mixed}
             assert sum(scores.values()) == pytest.approx(1.0)
             assert max(scores, key=lambda k: scores[k]) == decision.label.value
+            assert decision.confidence == pytest.approx(max(scores.values()))
 
-    def test_class_scores_hand_computed(self) -> None:
-        # Defaults: low=0.25, high=0.75 -> transition half-width h=0.125.
-        # frac_ai = 1.0 -> pure AI zone.
-        decision = aggregate_sentence_probs([0.9, 0.9])
-        assert (decision.p_human, decision.p_mixed, decision.p_ai) == (0.0, 0.0, 1.0)
-        # frac_ai = 0.0 -> pure human zone.
-        decision = aggregate_sentence_probs([0.1, 0.2])
-        assert (decision.p_human, decision.p_mixed, decision.p_ai) == (1.0, 0.0, 0.0)
-        # frac_ai = 0.5 -> mixed plateau.
-        decision = aggregate_sentence_probs([0.9, 0.1])
-        assert decision.p_mixed == 1.0
-        # frac_ai = 0.3 -> inside the lower transition [0.125, 0.375]:
-        # mixed = (0.3 - 0.125) / 0.25 = 0.7, human = 0.3.
-        decision = aggregate_sentence_probs([0.9, 0.9, 0.9, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
-        assert decision.p_mixed == pytest.approx(0.7)
-        assert decision.p_human == pytest.approx(0.3)
-        assert decision.p_ai == 0.0
-        assert decision.label is DocLabel.MIXED  # coherent with hard rule
+    def test_custom_band(self) -> None:
+        config = AggregationConfig(mixed_band_low=0.05, mixed_band_high=0.95)
+        decision = aggregate_sentence_probs([0.9, 0.1], config, doc_p=0.9)
+        assert decision.label is DocLabel.MIXED
 
     def test_empty_rejected(self) -> None:
         with pytest.raises(ValueError, match="empty"):
             aggregate_sentence_probs([])
 
     def test_bad_config_rejected(self) -> None:
-        with pytest.raises(ValueError, match="mixed_low"):
-            AggregationConfig(mixed_low=0.9, mixed_high=0.1)
+        with pytest.raises(ValueError, match="mixed_band_low"):
+            AggregationConfig(mixed_band_low=0.9, mixed_band_high=0.1)
+        with pytest.raises(ValueError, match="dispersion"):
+            AggregationConfig(mixed_min_dispersion=-1.0)

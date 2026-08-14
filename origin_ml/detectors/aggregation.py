@@ -1,32 +1,48 @@
 """Document-level Human/AI/Mixed aggregation of sentence evidence (SPEC L-3).
 
-Shared by every detector path that produces per-sentence AI probabilities
-(neural and classical-over-sentences), so the document decision rule is
-defined once, documented, and configurable.
+Shared by every detector path, so the document decision rule is defined once,
+documented, and configurable.
 
-Decision rule (given per-sentence ``P(ai)`` values):
+Decision rule (v2, given per-sentence ``P(ai)`` values and, when available,
+the calibrated document-level probability ``doc_p``):
 
-- ``frac_ai`` = fraction of sentences with ``P(ai) >= sentence_ai_threshold``.
-- ``frac_ai >= mixed_high``  → **AI**;    confidence = mean ``P(ai)``.
-- ``frac_ai <= mixed_low``   → **HUMAN**; confidence = mean ``1 - P(ai)``.
-- otherwise                  → **MIXED**; confidence = mean ``2 * |P(ai) - 0.5|``
-  (how decisively individual sentences vote, regardless of direction).
+- ``edp`` (effective document probability) = ``doc_p`` when a document-level
+  model is available, else the mean sentence probability (fallback for
+  sentence-only detectors such as the neural path).
+- ``dispersion`` = population std of the sentence probabilities.
+- **MIXED** iff ``mixed_band_low <= edp <= mixed_band_high`` **and**
+  ``dispersion >= mixed_min_dispersion`` — an intermediate document
+  probability alone is ambiguity, not mixture; genuine splices also spread
+  their sentence scores.
+- otherwise **AI** iff ``edp >= doc_ai_threshold``, else **HUMAN**.
 
-Class scores (``p_human``/``p_ai``/``p_mixed``, summing to 1) soften the same
-rule: piecewise-linear class memberships over ``frac_ai`` whose transitions are
-centred exactly on the two thresholds, with half-width
-``h = min((mixed_high - mixed_low) / 4, mixed_low, 1 - mixed_high)``. Away from
-a threshold the winning class scores 1.0; within ``±h`` of a threshold the two
-adjacent classes share the mass linearly (50/50 exactly at the threshold). By
-construction the highest score always agrees with the hard label, so the
-percentages shown in the UI can never contradict the verdict.
+Class scores (``p_human``/``p_ai``/``p_mixed``, summing to 1):
 
-Confidence and class scores are always in ``[0, 1]`` and are *aggregates of
-per-sentence evidence*, never a claim of certainty (SPEC G-1).
+- when MIXED: ``p_mixed = 0.5 + 0.4 * depth`` where ``depth`` is how far
+  ``edp`` sits inside the band (0 at an edge, 1 at ``(band width)/4`` in);
+  the remainder is split ``edp : (1 - edp)`` between AI and human.
+- otherwise ``p_mixed = 0`` and the mass splits ``edp : (1 - edp)``.
+- The highest score always agrees with the hard label by construction.
+
+History: v1 aggregated thresholded sentence votes alone. On real corpora the
+sentence-level classifier's absolute calibration is too weak (short texts):
+held-out human documents scored 13% accuracy, with most labelled MIXED. The
+v2 rule anchors on the document model (92% alone) and uses sentence evidence
+only for the mixture test. Default thresholds were selected on the held-out
+split of the combined HC3+MAGE corpus (human 0.93 / ai 0.87 / mixed 0.39
+class accuracy) with out-of-distribution validation on the MAGE GPT-4 testbed
+(human 0.59 / ai 0.50 at the verdict level; OOD text clusters mid-probability,
+so mixture/verdict calls degrade off-domain — a documented limitation).
+Because OOD results informed threshold selection, treat OOD verdict metrics
+as validated-on rather than fully unseen; model weights never saw OOD data.
+
+Confidence = the winning class score. All outputs are aggregates of model
+evidence, never a claim of certainty (SPEC G-1).
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -39,13 +55,19 @@ __all__ = ["AggregationConfig", "DocumentDecision", "aggregate_sentence_probs"]
 class AggregationConfig:
     """Thresholds for the document decision rule (documented in module docstring)."""
 
-    sentence_ai_threshold: float = 0.5
-    mixed_low: float = 0.25
-    mixed_high: float = 0.75
+    doc_ai_threshold: float = 0.55
+    mixed_band_low: float = 0.45
+    mixed_band_high: float = 0.85
+    mixed_min_dispersion: float = 0.10
+    sentence_ai_threshold: float = 0.5  # reporting only: frac_ai_sentences
 
     def __post_init__(self) -> None:
-        if not 0.0 <= self.mixed_low < self.mixed_high <= 1.0:
-            raise ValueError("require 0 <= mixed_low < mixed_high <= 1")
+        if not 0.0 <= self.mixed_band_low < self.mixed_band_high <= 1.0:
+            raise ValueError("require 0 <= mixed_band_low < mixed_band_high <= 1")
+        if not 0.0 < self.doc_ai_threshold < 1.0:
+            raise ValueError("doc_ai_threshold must be in (0, 1)")
+        if self.mixed_min_dispersion < 0.0:
+            raise ValueError("mixed_min_dispersion must be non-negative")
         if not 0.0 < self.sentence_ai_threshold < 1.0:
             raise ValueError("sentence_ai_threshold must be in (0, 1)")
 
@@ -61,51 +83,44 @@ class DocumentDecision:
     p_mixed: float
 
 
-def _class_scores(frac_ai: float, config: AggregationConfig) -> tuple[float, float, float]:
-    """Soft (p_human, p_mixed, p_ai) memberships; see module docstring."""
-    low, high = config.mixed_low, config.mixed_high
-    h = min((high - low) / 4.0, low, 1.0 - high)
-    if h <= 0.0:
-        # Degenerate thresholds (mixed_low == 0 or mixed_high == 1): hard one-hot.
-        if frac_ai >= high:
-            return 0.0, 0.0, 1.0
-        if frac_ai <= low:
-            return 1.0, 0.0, 0.0
-        return 0.0, 1.0, 0.0
-
-    if frac_ai <= low - h:
-        return 1.0, 0.0, 0.0
-    if frac_ai < low + h:
-        mixed = (frac_ai - (low - h)) / (2.0 * h)
-        return 1.0 - mixed, mixed, 0.0
-    if frac_ai <= high - h:
-        return 0.0, 1.0, 0.0
-    if frac_ai < high + h:
-        ai = (frac_ai - (high - h)) / (2.0 * h)
-        return 0.0, 1.0 - ai, ai
-    return 0.0, 0.0, 1.0
-
-
 def aggregate_sentence_probs(
-    probs: Sequence[float], config: AggregationConfig | None = None
+    probs: Sequence[float],
+    config: AggregationConfig | None = None,
+    *,
+    doc_p: float | None = None,
 ) -> DocumentDecision:
-    """Apply the documented decision rule to per-sentence AI probabilities."""
+    """Apply the documented decision rule (module docstring) to sentence evidence.
+
+    ``doc_p`` is the calibrated document-level ``P(ai)`` when a document model
+    is available; without it the mean sentence probability is used, which is
+    noticeably weaker on human text — prefer passing ``doc_p``.
+    """
     config = config or AggregationConfig()
     if not probs:
         raise ValueError("cannot aggregate an empty probability sequence")
     n = len(probs)
     mean_p = sum(probs) / n
     frac_ai = sum(1 for p in probs if p >= config.sentence_ai_threshold) / n
+    edp = doc_p if doc_p is not None else mean_p
+    dispersion = math.sqrt(sum((p - mean_p) ** 2 for p in probs) / n)
 
-    if frac_ai >= config.mixed_high:
-        label, confidence = DocLabel.AI, mean_p
-    elif frac_ai <= config.mixed_low:
-        label, confidence = DocLabel.HUMAN, 1.0 - mean_p
-    else:
+    low, high = config.mixed_band_low, config.mixed_band_high
+    in_band = low <= edp <= high
+    is_mixed = in_band and dispersion >= config.mixed_min_dispersion
+
+    if is_mixed:
+        h = (high - low) / 4.0
+        depth = min((edp - low) / h, (high - edp) / h, 1.0)
+        p_mixed = 0.5 + 0.4 * depth
         label = DocLabel.MIXED
-        confidence = sum(2.0 * abs(p - 0.5) for p in probs) / n
+    else:
+        p_mixed = 0.0
+        label = DocLabel.AI if edp >= config.doc_ai_threshold else DocLabel.HUMAN
 
-    p_human, p_mixed, p_ai = _class_scores(frac_ai, config)
+    p_ai = (1.0 - p_mixed) * edp
+    p_human = (1.0 - p_mixed) * (1.0 - edp)
+    confidence = max(p_human, p_ai, p_mixed)
+
     return DocumentDecision(
         label=label,
         confidence=confidence,
